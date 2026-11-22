@@ -157,7 +157,11 @@ test("a block needing the owner is handed off without restarting completed work"
 });
 
 test("the first line says how it ended", () => {
-  assert.deepEqual(readMessage("修好了首页的数字\n\n细节在 PR 里。"), { outcome: "done", summary: "修好了首页的数字" });
+  assert.deepEqual(readMessage("修好了首页的数字\n\n细节在 PR 里。"), {
+    outcome: "done",
+    summary: "修好了首页的数字",
+    body: "细节在 PR 里。",
+  });
   assert.deepEqual(readMessage("\n\n  **修好了**  \n"), { outcome: "done", summary: "修好了" });
   assert.deepEqual(readMessage("没跑成：连不上数据库。"), { outcome: "failed", error: "连不上数据库。" });
   assert.deepEqual(readMessage("**没跑成**：连不上数据库"), { outcome: "failed", error: "连不上数据库" });
@@ -196,6 +200,7 @@ test("the receipt is the last code block of its kind, wherever it sits", () => {
   assert.deepEqual(readMessage(body), {
     outcome: "done",
     summary: "做完了",
+    body: "```js\nconsole.log(1)\n```",
     receipt: { notice: [{ title: "看一眼", text: "这个" }] },
   });
   const twice =

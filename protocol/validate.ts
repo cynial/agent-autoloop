@@ -25,6 +25,8 @@ export function addUsage(total: Usage | undefined, more: Usage | undefined): Usa
 export type Result = {
   outcome: "done" | "nothing" | "failed" | "cancelled";
   summary?: string;
+  /** One line of conclusion is the summary; what follows it in the same message, for showing the detail alongside it. */
+  body?: string;
   error?: string;
   /** A failed round's agent can't work again before this time, such as a subscription's usage limit resetting then. */
   limitedUntil?: string;
@@ -163,6 +165,7 @@ export function parseResult(input: unknown): Result {
     !only(result, [
       "outcome",
       "summary",
+      "body",
       "error",
       "limitedUntil",
       "session",
@@ -179,8 +182,13 @@ export function parseResult(input: unknown): Result {
   if (!["done", "nothing", "failed", "cancelled"].includes(result.outcome as string)) {
     throw new InputError("outcome 只能是 done、nothing、failed、cancelled");
   }
-  if (!optional(result.summary, 500) || !optional(result.error, 500) || !optional(result.session, 500)) {
-    throw new InputError("summary、error、session 最多 500 字");
+  if (
+    !optional(result.summary, 500) ||
+    !optional(result.body, 4000) ||
+    !optional(result.error, 500) ||
+    !optional(result.session, 500)
+  ) {
+    throw new InputError("summary、error、session 最多 500 字，body 最多 4000 字");
   }
   if (result.limitedUntil !== undefined && (result.outcome !== "failed" || !dateTime(result.limitedUntil))) {
     throw new InputError("limitedUntil 只能跟 failed 一起交，要是带时区的 ISO 时间");

@@ -502,8 +502,10 @@ function applyReceipt(draft: Draft, run: Row, result: Result) {
   closeOpen(draft, (key) => key === `run:${id}:failing`, "后来跑成了");
   closeOpen(draft, (key) => key === `run:${id}:unknown`, "结果回来了");
   const eventIds = eventsOf(draft.view, id).map((event) => event.id);
+  // The card answered by this round shows the conclusion line and, under it, the detail the Agent wrote after it.
+  const answered = [summary, result.body?.trim()].filter(Boolean).join("\n\n");
   for (const card of rows(draft.view, "cards", { answer_event: eventIds, state: "decided" })) {
-    put(draft, "cards", card.id, { state: "done", result: summary, closed_at: draft.at, version: card.version + 1 });
+    put(draft, "cards", card.id, { state: "done", result: answered, closed_at: draft.at, version: card.version + 1 });
   }
   for (const item of result.resolve ?? []) {
     const card = openInScope(draft.view, run).find((card) => card.id === item.card);

@@ -115,8 +115,17 @@ test("an answer wakes the thread that asked, in its session, with what it left f
     [[id, "要不要删旧表", "留着", "表名 old_x，删之前先备份", "me"]],
   );
   const before = card(id).version;
-  finish(job.run, job.token, { outcome: "done", summary: "留着，已记下" }, at(3));
-  assert.deepEqual([card(id).state, card(id).result], ["done", "留着，已记下"]);
+  finish(
+    job.run,
+    job.token,
+    { outcome: "done", summary: "留着，已记下", body: "- 变更单 1：留着\n- 峰值利用率：12% → 9%" },
+    at(3),
+  );
+  assert.deepEqual(
+    [card(id).state, card(id).result],
+    ["done", "留着，已记下\n\n- 变更单 1：留着\n- 峰值利用率：12% → 9%"],
+    "the card shows the conclusion line and the detail the Agent listed under it",
+  );
   assert.equal(card(id).version, before + 1);
 });
 
