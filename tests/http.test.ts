@@ -18,6 +18,13 @@ import { after, before, test } from "node:test";
 import { setup } from "./helpers.ts";
 
 const home = setup("http");
+// 卡片默认 12 小时就没人回答就结案，而这个文件里有几张刻意「放了很久」的卡（量的是链接的一周寿命），
+// 所以整个文件换用一份关掉结案的规则：每回到点的 tick 都会重读这份规则，改在文件里才站得住。
+const rulesFile = join(home, "rules.json");
+const fixtureRules = JSON.parse(readFileSync(process.env.AGENT_AUTOLOOP_RULES!, "utf8"));
+fixtureRules.cards = { ...(fixtureRules.cards ?? {}), expireAfterHours: 0 };
+writeFileSync(rulesFile, JSON.stringify(fixtureRules));
+process.env.AGENT_AUTOLOOP_RULES = rulesFile;
 mkdirSync(join(home, "plugins", "echo"), { recursive: true });
 writeFileSync(
   join(home, "plugins", "echo", "source.ts"),

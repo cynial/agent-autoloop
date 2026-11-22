@@ -36,7 +36,7 @@ import { formatWhy } from "../cli/why.ts";
 
 setup("cards");
 const { ingest } = await import("./hub.ts");
-const { cancel, claimNext, execute, finish, heartbeat, started, sweep, why } = await import("./hub.ts");
+const { cancel, claimNext, execute, finish, heartbeat, started, sweep, tick, why } = await import("./hub.ts");
 const { answer, resolve, nextCard, delivered, failed, tell, cardByToken, getView, stateOf } = await import("./hub.ts");
 const { AuthError, InputError, NotFound } = await import("../kernel/errors.ts");
 const { all, one, run } = await import("./storage.ts");
@@ -872,4 +872,51 @@ test("a card's link goes only to a channel that allows it, and opens only that c
   assert.equal(nextCard("chat", at(1))!.link, null, "a channel with buttons has no use for a link that answers");
   assert.equal(cardByToken(new URL(link).pathname.slice("/c/".length))!.id, id);
   assert.equal(cardByToken("made-up"), undefined);
+});
+
+test("a card nobody answers in time is closed by the clock, and no channel is told about it", () => {
+  clean();
+  const { id } = asked(1);
+  nextCard("chat", at(1));
+  delivered("chat", id, 1, "om_1", at(2));
+  const version = card(id).version;
+  tick(at(11 * 60));
+  assert.equal(card(id).state, "open", "eleven hours in, the question still stands");
+  tick(at(13 * 60));
+  const closed = card(id);
+  assert.deepEqual([closed.state, closed.result], ["closed", "过了 12 小时没人回答，中台把它结了"]);
+  const delivery = one<{ version: number }>("SELECT version FROM deliveries WHERE card_id = ? AND channel = 'chat'", [
+    id,
+  ])!;
+  assert.equal(delivery.version, version + 1, "the channel is at the closed version, so it sends no result message");
+  assert.equal(nextCard("chat", at(13 * 60)), null, "and nothing is left to send");
+  assert.equal(answer(id, { choice: 1, by: "me" }, at(14 * 60)).changed, false, "a late answer changes nothing");
+});
+
+test("a channel that never got the card hears nothing of its closing", () => {
+  clean();
+  const { id } = asked(1);
+  nextCard("chat", at(1));
+  delivered("chat", id, 1, "om_1", at(2));
+  tick(at(13 * 60));
+  const row = one<{ card_id: number }>("SELECT card_id FROM deliveries WHERE channel = 'plain'");
+  assert.equal(row, undefined, "the channel the card never reached isn't told it's over");
+});
+
+test("cards.expireAfterHours decides how long they wait; 0 leaves them to the owner", () => {
+  clean();
+  underRules(
+    (rules) => {
+      rules.cards = { expireAfterHours: 0 };
+    },
+    () => {
+      const { id } = asked(1);
+      // execute, not tick: the runtime's tick re-reads rules.json and would drop what this test changed.
+      execute("tick", [], at(72 * 60));
+      assert.equal(card(id).state, "open", "switched off, the clock closes nothing");
+    },
+  );
+  const { id } = asked(2);
+  execute("tick", [], at(72 * 60 + 1));
+  assert.equal(card(id).state, "closed", "back to the default, the same card is closed");
 });

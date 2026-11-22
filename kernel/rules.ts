@@ -44,10 +44,14 @@ export type Elsewhere = RuleWords & {
   effort?: string;
   cwd?: string;
 };
+/** How the hub treats cards nobody answers: without `cards`, CARD_TTL_HOURS after they were asked. */
+export type CardSettings = { expireAfterHours?: number };
 type Registered = { sources: Record<string, Source>; agents: Record<string, Agent>; channels: Record<string, Channel> };
 export type Rules = Registered & {
   timezone: string;
   askFirst: string[];
+  /** The clock's part in a card's life: one left open this long is closed by the hub itself. */
+  cards?: CardSettings;
   /** Where a card that names no channels of its own goes: a tell, the hub's own alerts, a rule without a list. */
   defaultChannels?: string[];
   rules: Rule[];

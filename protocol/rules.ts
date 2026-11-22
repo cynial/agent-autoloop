@@ -2,6 +2,7 @@
 // rules between them and, only to be shown, the scheduled tasks that run elsewhere. A mistake is caught here with a
 // message saying where: at start it stops the hub, later it leaves the old rules running and the owner is told.
 import { nextRun, parseCron } from "../kernel/cron.ts";
+import { CARD_TTL_HOURS } from "../kernel/due.ts";
 import { SCHEDULE, type Rule, type Rules } from "../kernel/rules.ts";
 
 export class RulesError extends Error {
@@ -30,6 +31,8 @@ const isWords: Check = (value) => Array.isArray(value) && value.every(isText);
 const isSomeWords: Check = (value) => isWords(value) && (value as string[]).length > 0;
 const isId: Check = (value) => typeof value === "string" && ID.test(value);
 const isCount: Check = (value) => Number.isInteger(value) && (value as number) > 0;
+/** How long something waits, in hours: 0 is a real answer to it (don't), so it isn't a count. */
+const isHours: Check = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 24 * 30;
 const isTypes: Check = (value) => isSomeWords(value) && (value as string[]).every((type) => TYPE_PATTERN.test(type));
 const isCron: Check = (value) => typeof value === "string" && parseCron(value) !== null;
 // One word, as a client may name a session after the first word of its first message. It leads the prompt, which goes to
@@ -138,6 +141,7 @@ export function parseRules(json: string, now: number, timezone: string): Rules {
     ["agents", isObject, "要是一个对象"],
     ["channels", isObject, "要是一个对象", true],
     ["defaultChannels", isSomeWords, "要是通道编号的列表", true],
+    ["cards", isObject, "要是一个对象", true],
     ["rules", Array.isArray, "要是一个列表"],
     ["elsewhere", Array.isArray, "要是一个列表", true],
   ]);
@@ -147,6 +151,11 @@ export function parseRules(json: string, now: number, timezone: string): Rules {
   rules.askFirst ??= ASK_FIRST;
   rules.channels ??= {};
   rules.elsewhere ??= [];
+  checkFields(issues, "rules.json 的 cards ", rules.cards ?? {}, [
+    ["expireAfterHours", isHours, "要是 0 到 720 之间的数字，0 表示卡片不自动结案", true],
+  ]);
+  rules.cards ??= {};
+  rules.cards.expireAfterHours ??= CARD_TTL_HOURS;
   if (SCHEDULE in rules.sources) issues.push(`来源 ${SCHEDULE} 是保留的，定时用规则的 cron`);
   for (const [id, source] of Object.entries(rules.sources)) {
     if (!ID.test(id)) issues.push(`来源的编号${ID_WORDS}：${id}`);

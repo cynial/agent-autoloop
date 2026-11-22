@@ -66,6 +66,7 @@
   },
   "channels": { "feishu": { "name": "飞书", "answerers": ["ou_xxx"] } },
   "defaultChannels": ["feishu"], // 可选：自己没写 channels 的卡片和通知（tell、中台自己的告警、别处定时任务的提问、没写 channels 的规则）只发到这几个通道，不写就发到所有通道
+  "cards": { "expireAfterHours": 12 }, // 可选：卡片超过这么多小时没人回答就由中台自己结案（默认 12），0 表示不自动结案；结案不打扰通道
   "rules": [
     {
       "name": "处理告警",

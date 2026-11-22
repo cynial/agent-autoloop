@@ -2,7 +2,7 @@
 // to give. Time and secrets come in as arguments, so the same input on the same view always decides the same.
 import { credential, digest, type Environment } from "./credentials.ts";
 import { latestBefore, nextRun, parseCron } from "./cron.ts";
-import { deadlines, MINUTE, offlineCard, OFFLINE_AFTER, RUN_LEASE, SEEN_EVERY, WORKER_FRESH } from "./due.ts";
+import { cardTtl, deadlines, MINUTE, offlineCard, OFFLINE_AFTER, RUN_LEASE, SEEN_EVERY, WORKER_FRESH } from "./due.ts";
 import { AuthError, Conflict, InputError, NotFound } from "./errors.ts";
 import { iso, rows, type Change, type Fact, type Row, type Table, type View } from "./evolve.ts";
 import {
@@ -281,6 +281,26 @@ function cardFromReceipt(draft: Draft, run: Row, kind: string, card: Row) {
   // Closed as it's made, nothing open stops it coming again: a run trying again says it once.
   if (fyi && rows(draft.view, "cards", { key, run_id: run.id }, 1).length) return;
   createCard(draft, { ...card, hops: hopsOf(draft, run), key, kind, fyi, quiet, ...threadOf(run), ...origin });
+}
+
+/**
+ * Cards nobody answered in time stop holding a place. Closing one is silent: no channel is told again, and none that never
+ * had it is told at all. What was asked about has usually moved on by now, so answering it late would act on stale words.
+ */
+function expireCards(draft: Draft) {
+  const ttl = cardTtl(draft.rules);
+  if (ttl <= 0) return;
+  const { now } = draft;
+  for (const card of rows(draft.view, "cards", { state: "open" })) {
+    if (now - Date.parse(card.created_at) < ttl) continue;
+    // Each channel that already has the card is brought up to the version it becomes closed at, so sending it the result
+    // would be sending news of a card nobody is waiting on.
+    for (const delivery of rows(draft.view, "deliveries", { card_id: card.id })) {
+      if (delivery.ref === null) continue;
+      put(draft, "deliveries", `${card.id}:${delivery.channel}`, { version: card.version + 1 });
+    }
+    closeCard(draft, card, `过了 ${Math.round(ttl / MINUTE / 60)} 小时没人回答，中台把它结了`);
+  }
 }
 
 /** Notices what has gone quiet: a worker that stopped coming, a run its worker stopped mentioning. */
@@ -689,6 +709,7 @@ function tick(draft: Draft) {
     }
   }
   sweep(draft);
+  expireCards(draft);
 }
 
 /** A schedule whose next moment passed while paused starts again at the first moment from `from`, not with a backlog. */

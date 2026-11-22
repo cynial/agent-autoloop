@@ -2,6 +2,7 @@
 // run out. The shell keeps one timer, for the earliest of them, so nothing has to poll.
 import { rows, type Row, type View } from "./evolve.ts";
 import { configuration, waitingOn, workers } from "./query.ts";
+import type { Rules } from "./rules.ts";
 
 export const MINUTE = 60_000;
 /** A worker seen this recently is really there, so a run it has stopped mentioning has really gone quiet. */
@@ -16,6 +17,15 @@ export const OFFLINE_AFTER = 10 * MINUTE;
  * under WORKER_FRESH; and under RUN_LEASE - WORKER_FRESH, or a run could look quiet while its worker still looks there.
  */
 export const SEEN_EVERY = MINUTE;
+/**
+ * How long a card waits for an answer before the hub closes it: a question nobody came back to stops holding a place, and
+ * closing it is what keeps a stale one from being answered long after what it was about. Set `"cards":
+ * { "expireAfterHours": n }` in rules.json to change it; 0 leaves cards open until the owner handles them.
+ */
+export const CARD_TTL_HOURS = 12;
+
+/** How long this hub's cards stay open, in milliseconds: 0 means they don't expire. */
+export const cardTtl = (rules: Rules) => Math.max(0, rules.cards?.expireAfterHours ?? CARD_TTL_HOURS) * 60 * MINUTE;
 
 /**
  * The card about a worker gone away, and whether it has said all there is to say: it's still open, or the owner closed it
@@ -51,6 +61,13 @@ export function deadlines(view: View, now: number) {
   for (const delivery of rows(view, "deliveries", { given_up: 0, not_before: { not: null } })) {
     const notBefore = Date.parse(delivery.not_before);
     if (notBefore > now) add("delivery", `${delivery.card_id}:${delivery.channel}`, notBefore);
+  }
+  const cardTtlMs = cardTtl(configuration(view));
+  if (cardTtlMs > 0) {
+    for (const card of rows(view, "cards", { state: "open" })) {
+      // One already past its time goes at once, like any deadline the hub slept through.
+      add("card", String(card.id), Math.max(now, Date.parse(card.created_at) + cardTtlMs));
+    }
   }
   for (const worker of workers(view)) {
     const seen = view.get("seen", `worker:${worker}`);
